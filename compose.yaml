@@ -1,0 +1,129 @@
+name: ${COMPOSE_PROJECT_NAME:-fiberglass}
+
+services:
+  # ── PHP-FPM: Laravel (HTTP) ────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+      target: ${PHP_TARGET:-dev}
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    image: ${COMPOSE_PROJECT_NAME:-fiberglass}/app:${PHP_TARGET:-dev}
+    environment:
+      XDEBUG_MODE: ${XDEBUG_MODE:-off}
+      XDEBUG_CLIENT_HOST: ${XDEBUG_CLIENT_HOST:-host.docker.internal}
+      PHP_IDE_CONFIG: serverName=fiberglass
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./backend:/var/www/html
+      - composer-cache:/home/app/.composer/cache
+      - mesh-storage:/var/www/html/storage/app/meshes
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "php-fpm-healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # ── Nginx: статика + FastCGI ───────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "${APP_PORT:-8080}:80"
+    volumes:
+      - ./backend:/var/www/html:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/nginx/upload.conf:/etc/nginx/conf.d/upload.conf:ro
+    depends_on:
+      - app
+    healthcheck:
+      # Именно 127.0.0.1, а не localhost: внутри контейнера тот резолвится
+      # в ::1 первым, а nginx слушает только IPv4 — connection refused.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/up"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  # Воркер очереди появляется на этапе 2 вместе с ProcessMeshJob — сервисом
+  # на том же образе с command: php artisan queue:work. До этого
+  # QUEUE_CONNECTION=sync и потреблять из очереди некому.
+
+  # ── Планировщик ────────────────────────────────────────────────────────────
+  scheduler:
+    image: ${COMPOSE_PROJECT_NAME:-fiberglass}/app:${PHP_TARGET:-dev}
+    command: ["php", "artisan", "schedule:work"]
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./backend:/var/www/html
+      - mesh-storage:/var/www/html/storage/app/meshes
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:-fiberglass}
+      POSTGRES_USER: ${DB_USERNAME:-fiberglass}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${DB_PORT_FORWARD:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - work_mem=16MB
+      - -c
+      - max_connections=100
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-fiberglass} -d ${DB_DATABASE:-fiberglass}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # RabbitMQ приходит на этапе 2 вместе с воркером и ProcessMeshJob.
+  # Конфиг брокера сохранён в docker/rabbitmq/rabbitmq.conf.
+
+  # ── Vite dev server (Vue/React + Three.js) ─────────────────────────────────
+  node:
+    build:
+      context: .
+      dockerfile: docker/node/Dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    ports:
+      - "${VITE_PORT:-5173}:5173"
+    environment:
+      VITE_PORT: 5173
+      CHOKIDAR_USEPOLLING: ${CHOKIDAR_USEPOLLING:-true}
+    volumes:
+      - ./backend:/var/www/html
+      - node-modules:/var/www/html/node_modules
+    profiles: ["frontend"]
+
+volumes:
+  pgdata:
+  composer-cache:
+  node-modules:
+  mesh-storage:

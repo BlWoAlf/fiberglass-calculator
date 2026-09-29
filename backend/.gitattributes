@@ -1,0 +1,18 @@
+* text=auto eol=lf
+
+*.blade.php diff=html
+*.css diff=css
+*.html diff=html
+*.md diff=markdown
+*.php diff=php
+
+/.github export-ignore
+CHANGELOG.md export-ignore
+.styleci.yml export-ignore
+
+# Эталонные меши для тестов геометрии: бинарные STL/GLB нормализовать нельзя.
+# Правило нужно именно здесь — `* text=auto eol=lf` выше перекрывает корневой
+# .gitattributes для всего, что лежит под backend/.
+*.stl binary
+*.glb binary
+*.drc binary

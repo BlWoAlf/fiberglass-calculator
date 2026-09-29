@@ -1,0 +1,22 @@
+# Нормализация переводов строк. Критично: entrypoint.sh и прочие скрипты
+# исполняются внутри Linux-контейнеров, и CRLF в шебанге ломает запуск
+# с «bad interpreter». На Windows git без этого файла выдаст именно CRLF.
+* text=auto eol=lf
+
+*.sh      text eol=lf
+Makefile  text eol=lf
+Dockerfile text eol=lf
+*.conf    text eol=lf
+*.ini     text eol=lf
+
+# PowerShell-скрипты — по конвенции CRLF. BOM в dev.ps1 нужен Windows
+# PowerShell 5.1, но он живёт в самих байтах файла, git его не трогает.
+*.ps1 text eol=crlf
+
+# Меши. Бинарные STL и GLB нормализовать нельзя — git их испортит.
+*.stl binary
+*.glb binary
+*.gltf binary
+*.drc binary
+
+*.md diff=markdown
