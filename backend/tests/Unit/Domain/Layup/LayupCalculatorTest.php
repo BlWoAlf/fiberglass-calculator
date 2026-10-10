@@ -46,14 +46,16 @@ class LayupCalculatorTest extends TestCase
         // mass_gelcoat = 2 m² * 500 г/м² = 1000 г
         // mass_total = 900 + 1350 + 405 + 1000 = 3655 г
         //
-        // цены: reinforcement 300 ₽/кг, resin 200 ₽/кг, hardener 400 ₽/кг, gelcoat 250 ₽/кг
+        // цены: reinforcement 300 ₽/кг, resin 220 ₽/кг, hardener 400 ₽/кг, gelcoat 250 ₽/кг
+        // (все шесть денежных сумм ниже сделаны уникальными намеренно — чтобы тест ловил
+        // любую перестановку полей местами, а не только арифметическую ошибку)
         // cost_reinforcement = 0.9 кг * 300 = 270 ₽
-        // cost_resin         = 1.35 кг * 200 = 270 ₽
+        // cost_resin         = 1.35 кг * 220 = 297 ₽
         // cost_hardener      = 0.405 кг * 400 = 162 ₽
         // cost_gelcoat       = 1.0 кг * 250 = 250 ₽
-        // cost_before_waste  = 270 + 270 + 162 + 250 = 952 ₽
-        // waste_factor=0.1 -> waste_line = 95.2 ₽
-        // total_cost = 952 + 95.2 = 1047.2 ₽
+        // cost_before_waste  = 270 + 297 + 162 + 250 = 979 ₽
+        // waste_factor=0.1 -> waste_line = 97.9 ₽
+        // total_cost = 979 + 97.9 = 1076.9 ₽
 
         $scheme = new LayupScheme([
             new LayupLayer(material: $this->reinforcement(), coverage: 1.0, overlapWaste: 0.0, position: 0),
@@ -67,7 +69,7 @@ class LayupCalculatorTest extends TestCase
 
         $prices = new PriceSnapshot([
             1 => Money::fromMajorUnits(300.0, 'RUB'),
-            2 => Money::fromMajorUnits(200.0, 'RUB'),
+            2 => Money::fromMajorUnits(220.0, 'RUB'),
             3 => Money::fromMajorUnits(400.0, 'RUB'),
             4 => Money::fromMajorUnits(250.0, 'RUB'),
         ]);
@@ -89,11 +91,11 @@ class LayupCalculatorTest extends TestCase
         $this->assertEqualsWithDelta(3655.0, $breakdown->massTotal->g(), 1e-9);
 
         $this->assertSame(27000, $breakdown->reinforcementLines[0]->cost->minorUnits());
-        $this->assertSame(27000, $breakdown->costResin->minorUnits());
+        $this->assertSame(29700, $breakdown->costResin->minorUnits());
         $this->assertSame(16200, $breakdown->costHardener->minorUnits());
         $this->assertSame(25000, $breakdown->costGelcoat->minorUnits());
-        $this->assertSame(9520, $breakdown->wasteLine->minorUnits());
-        $this->assertSame(104720, $breakdown->totalCost->minorUnits());
+        $this->assertSame(9790, $breakdown->wasteLine->minorUnits());
+        $this->assertSame(107690, $breakdown->totalCost->minorUnits());
     }
 
     public function test_gelcoat_is_optional(): void
